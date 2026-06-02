@@ -1,0 +1,45 @@
+{
+  "name": "word-format-adjuster",
+  "version": "0.1.0",
+  "description": "本地 Word 格式调整器桌面应用",
+  "main": ".vite/build/main.js",
+  "scripts": {
+    "dev": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "test": "vitest run",
+    "check": "tsc --noEmit && vite build --config vite.renderer.config.ts && electron-forge package --platform win32 --arch x64"
+  },
+  "keywords": [
+    "docx",
+    "electron",
+    "word",
+    "ooxml"
+  ],
+  "author": "Word Format Adjuster",
+  "license": "MIT",
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "@xmldom/xmldom": "^0.9.10",
+    "docx-preview": "latest",
+    "electron-squirrel-startup": "latest",
+    "fast-xml-parser": "latest",
+    "jszip": "latest",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "latest",
+    "@electron-forge/maker-squirrel": "latest",
+    "@electron-forge/maker-zip": "latest",
+    "@electron-forge/plugin-vite": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "electron": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "latest"
+  }
+}

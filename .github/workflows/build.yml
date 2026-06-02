@@ -1,4 +1,4 @@
-name: Build Windows package
+name: Build desktop packages
 
 on:
   push:
@@ -18,9 +18,35 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  build-windows:
-    name: Build Windows desktop app
-    runs-on: windows-latest
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows x64
+            os: windows-latest
+            platform: win32
+            arch: x64
+            artifact: word-format-adjuster-windows-x64
+          - label: macOS x64
+            os: macos-latest
+            platform: darwin
+            arch: x64
+            artifact: word-format-adjuster-macos-x64
+          - label: Linux x64
+            os: ubuntu-latest
+            platform: linux
+            arch: x64
+            artifact: word-format-adjuster-linux-x64
+
+    env:
+      BUILD_PLATFORM: ${{ matrix.platform }}
+      BUILD_ARCH: ${{ matrix.arch }}
+      ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
+      CI: true
 
     steps:
       - name: Checkout
@@ -32,6 +58,14 @@ jobs:
           node-version: "24"
           cache: npm
 
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/electron-cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
       - name: Install dependencies
         run: npm ci
 
@@ -39,7 +73,16 @@ jobs:
         run: npm test
 
       - name: Make distributables
-        run: npm run make -- --platform win32 --arch x64
+        shell: pwsh
+        env:
+          DEBUG: electron-forge:*,electron-packager,@electron/get:*
+        run: |
+          Remove-Item -LiteralPath "out" -Recurse -Force -ErrorAction SilentlyContinue
+          npm run make -- --platform=$env:BUILD_PLATFORM --arch=$env:BUILD_ARCH
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "electron-forge make failed; the next step will try the electron-packager fallback."
+            exit 0
+          }
 
       - name: Collect packaged files
         shell: pwsh
@@ -47,71 +90,100 @@ jobs:
           $artifactDir = "dist-artifacts"
           New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
 
-          $expected = @(
-            "out/make/squirrel.windows/x64/WordFormatAdjusterSetup.exe"
-            "out/make/squirrel.windows/x64/*.nupkg"
-            "out/make/squirrel.windows/x64/RELEASES"
-            "out/make/zip/win32/x64/*.zip"
-          )
-
+          $knownExtensions = @(".zip", ".dmg", ".pkg", ".deb", ".rpm", ".AppImage", ".exe", ".nupkg")
           $files = @()
-          foreach ($pattern in $expected) {
-            $files += Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue
+
+          if (Test-Path "out/make") {
+            $files = Get-ChildItem -Path "out/make" -Recurse -File |
+              Where-Object {
+                $knownExtensions -contains $_.Extension -or $_.Name -eq "RELEASES"
+              }
           }
 
           if ($files.Count -eq 0) {
-            Write-Host "Installer artifacts were not found. Creating portable zip from packaged app..."
-            $packageExe = Get-ChildItem -Path "out" -Recurse -File -Filter "WordFormatAdjuster.exe" -ErrorAction SilentlyContinue |
-              Select-Object -First 1
+            Write-Host "Forge maker artifacts were not found. Running electron-packager fallback..."
 
-            if ($packageExe) {
-              $packageDir = $packageExe.Directory.FullName
-              $portableZip = Join-Path $artifactDir "WordFormatAdjuster-win32-x64-portable.zip"
-              Compress-Archive -Path (Join-Path $packageDir "*") -DestinationPath $portableZip -Force
+            $fallbackOut = Join-Path $env:RUNNER_TEMP "word-format-adjuster-package"
+            Remove-Item -LiteralPath $fallbackOut -Recurse -Force -ErrorAction SilentlyContinue
+
+            $packagerArgs = @(
+              "exec",
+              "--",
+              "electron-packager",
+              ".",
+              "WordFormatAdjuster",
+              "--platform=$env:BUILD_PLATFORM",
+              "--arch=$env:BUILD_ARCH",
+              "--out=$fallbackOut",
+              "--overwrite",
+              "--asar",
+              "--executable-name=WordFormatAdjuster"
+            )
+
+            & npm @packagerArgs
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+
+            $packageDir = Get-ChildItem -Path $fallbackOut -Directory | Select-Object -First 1
+            if (-not $packageDir) {
+              throw "electron-packager did not create a package directory."
+            }
+
+            if ($env:BUILD_PLATFORM -eq "darwin") {
+              $appBundle = Get-ChildItem -Path $packageDir.FullName -Directory -Filter "*.app" | Select-Object -First 1
+              if (-not $appBundle) {
+                throw "macOS fallback package did not contain an .app bundle."
+              }
+
+              $portableZip = Join-Path $artifactDir "WordFormatAdjuster-darwin-$env:BUILD_ARCH-portable.zip"
+              & ditto -c -k --sequesterRsrc --keepParent $appBundle.FullName $portableZip
+              if ($LASTEXITCODE -ne 0) {
+                exit $LASTEXITCODE
+              }
+
+              $files = @(Get-Item -LiteralPath $portableZip)
+            } elseif ($env:BUILD_PLATFORM -eq "linux") {
+              $portableTar = Join-Path $artifactDir "WordFormatAdjuster-linux-$env:BUILD_ARCH-portable.tar.gz"
+              & tar -czf $portableTar -C $packageDir.FullName .
+              if ($LASTEXITCODE -ne 0) {
+                exit $LASTEXITCODE
+              }
+
+              $files = @(Get-Item -LiteralPath $portableTar)
+            } else {
+              $portableZip = Join-Path $artifactDir "WordFormatAdjuster-win32-$env:BUILD_ARCH-portable.zip"
+              Compress-Archive -Path (Join-Path $packageDir.FullName "*") -DestinationPath $portableZip -Force
               $files = @(Get-Item -LiteralPath $portableZip)
             }
           }
 
           if ($files.Count -eq 0) {
-            Write-Host "Portable package was not found. Searching workspace for known artifact files..."
-            $files = Get-ChildItem -Path . -Recurse -File |
-              Where-Object {
-                $_.FullName -notmatch "\\node_modules\\" -and
-                $_.FullName -notmatch "\\.git\\" -and
-                (
-                  $_.Name -eq "WordFormatAdjusterSetup.exe" -or
-                  $_.Name -eq "WordFormatAdjuster.exe" -or
-                  $_.Name -eq "RELEASES" -or
-                  $_.Name -like "*.nupkg" -or
-                  $_.Name -like "*.zip"
-                )
-              }
-          }
-
-          if ($files.Count -eq 0) {
-            Write-Host "No packaged files found. First 200 generated files:"
+            Write-Host "No packaged files found. Generated files outside node_modules/.git:"
             Get-ChildItem -Path . -Recurse -File |
               Where-Object {
-                $_.FullName -notmatch "\\node_modules\\" -and
-                $_.FullName -notmatch "\\.git\\"
+                $_.FullName -notmatch "[\\/](node_modules|\.git)[\\/]"
               } |
               Select-Object -First 200 -ExpandProperty FullName
-            throw "No packaged files found after npm run make."
+            throw "No packaged files found after build."
           }
 
-          foreach ($file in $files) {
-            if ($file.DirectoryName -ne (Resolve-Path $artifactDir).Path) {
-              Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $artifactDir $file.Name) -Force
+          $artifactRoot = (Resolve-Path $artifactDir).Path
+          $files |
+            Sort-Object -Property FullName -Unique |
+            ForEach-Object {
+              if ($_.DirectoryName -ne $artifactRoot) {
+                Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $artifactDir $_.Name) -Force
+              }
             }
-          }
 
           Get-ChildItem -Path $artifactDir -File |
             ForEach-Object { "{0} {1:n2} MB" -f $_.Name, ($_.Length / 1MB) }
 
-      - name: Upload Windows package artifact
+      - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
-          name: word-format-adjuster-win32-x64
+          name: ${{ matrix.artifact }}
           if-no-files-found: error
           retention-days: 14
           path: dist-artifacts/*
@@ -125,8 +197,20 @@ jobs:
           $tag = $env:GITHUB_REF_NAME
           $assets = (Get-ChildItem "dist-artifacts" -File).FullName
 
-          if (gh release view $tag *> $null) {
-            gh release upload $tag @assets --clobber
-          } else {
-            gh release create $tag @assets --title $tag --notes "Automated Windows desktop build."
+          if (-not $assets) {
+            throw "No assets found for release upload."
           }
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title $tag --notes "Automated desktop builds."
+            if ($LASTEXITCODE -ne 0) {
+              gh release view $tag *> $null
+              if ($LASTEXITCODE -ne 0) {
+                exit $LASTEXITCODE
+              }
+            }
+          }
+
+          $assetArgs = @($assets)
+          gh release upload $tag @assetArgs --clobber

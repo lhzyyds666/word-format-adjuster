@@ -15,7 +15,7 @@ const config: ForgeConfig = {
       name: "word_format_adjuster",
       setupExe: "WordFormatAdjusterSetup.exe"
     }),
-    new MakerZIP({}, ["win32"])
+    new MakerZIP({}, ["win32", "darwin", "linux"])
   ],
   plugins: [
     new VitePlugin({

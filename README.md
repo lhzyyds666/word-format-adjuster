@@ -20,9 +20,10 @@ npm run check
 
 仓库包含 GitHub Actions workflow：`.github/workflows/build.yml`。
 
-- push 到 `main` 或手动运行 workflow 时，会在 GitHub 的 Windows runner 上执行 `npm ci`、`npm test` 和 `npm run make`。
+- push 到 `main` 或手动运行 workflow 时，会在 GitHub 的 Windows、macOS、Linux runner 上分别执行 `npm ci`、`npm test` 和桌面打包。
 - 打包产物不会提交进 git，会作为 Actions artifact 上传，保留 14 天。
-- 推送 `v*` 标签时，会额外创建/更新 GitHub Release，并上传 Windows 安装包与 zip。
+- 推送 `v*` 标签时，会额外创建/更新 GitHub Release，并上传三平台产物。
+- 优先上传 Electron Forge maker 产物；如果 runner 没有生成 maker 文件，会自动用 `electron-packager` 生成便携版包作为兜底。
 
 发布新版本示例：
 

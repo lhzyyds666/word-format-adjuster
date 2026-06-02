@@ -60,13 +60,27 @@ jobs:
           }
 
           if ($files.Count -eq 0) {
-            Write-Host "Expected out/make files were not found. Searching workspace..."
+            Write-Host "Installer artifacts were not found. Creating portable zip from packaged app..."
+            $packageExe = Get-ChildItem -Path "out" -Recurse -File -Filter "WordFormatAdjuster.exe" -ErrorAction SilentlyContinue |
+              Select-Object -First 1
+
+            if ($packageExe) {
+              $packageDir = $packageExe.Directory.FullName
+              $portableZip = Join-Path $artifactDir "WordFormatAdjuster-win32-x64-portable.zip"
+              Compress-Archive -Path (Join-Path $packageDir "*") -DestinationPath $portableZip -Force
+              $files = @(Get-Item -LiteralPath $portableZip)
+            }
+          }
+
+          if ($files.Count -eq 0) {
+            Write-Host "Portable package was not found. Searching workspace for known artifact files..."
             $files = Get-ChildItem -Path . -Recurse -File |
               Where-Object {
                 $_.FullName -notmatch "\\node_modules\\" -and
                 $_.FullName -notmatch "\\.git\\" -and
                 (
                   $_.Name -eq "WordFormatAdjusterSetup.exe" -or
+                  $_.Name -eq "WordFormatAdjuster.exe" -or
                   $_.Name -eq "RELEASES" -or
                   $_.Name -like "*.nupkg" -or
                   $_.Name -like "*.zip"
@@ -75,11 +89,20 @@ jobs:
           }
 
           if ($files.Count -eq 0) {
+            Write-Host "No packaged files found. First 200 generated files:"
+            Get-ChildItem -Path . -Recurse -File |
+              Where-Object {
+                $_.FullName -notmatch "\\node_modules\\" -and
+                $_.FullName -notmatch "\\.git\\"
+              } |
+              Select-Object -First 200 -ExpandProperty FullName
             throw "No packaged files found after npm run make."
           }
 
           foreach ($file in $files) {
-            Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $artifactDir $file.Name) -Force
+            if ($file.DirectoryName -ne (Resolve-Path $artifactDir).Path) {
+              Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $artifactDir $file.Name) -Force
+            }
           }
 
           Get-ChildItem -Path $artifactDir -File |

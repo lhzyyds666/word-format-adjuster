@@ -20,7 +20,7 @@ env:
 jobs:
   build:
     name: Build ${{ matrix.label }}
-    runs-on: ${{ matrix.os }}
+    runs-on: "${{ matrix.os }}"
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -43,10 +43,10 @@ jobs:
             artifact: word-format-adjuster-linux-x64
 
     env:
-      BUILD_PLATFORM: ${{ matrix.platform }}
-      BUILD_ARCH: ${{ matrix.arch }}
-      ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
-      CI: true
+      BUILD_PLATFORM: "${{ matrix.platform }}"
+      BUILD_ARCH: "${{ matrix.arch }}"
+      ELECTRON_CACHE: "${{ runner.temp }}/electron-cache"
+      CI: "true"
 
     steps:
       - name: Checkout
@@ -61,8 +61,8 @@ jobs:
       - name: Cache Electron downloads
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/electron-cache
-          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          path: "${{ runner.temp }}/electron-cache"
+          key: "${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}"
           restore-keys: |
             ${{ runner.os }}-electron-
 
@@ -75,7 +75,7 @@ jobs:
       - name: Make distributables
         shell: pwsh
         env:
-          DEBUG: electron-forge:*,electron-packager,@electron/get:*
+          DEBUG: "electron-forge:*,electron-packager,@electron/get:*"
         run: |
           Remove-Item -LiteralPath "out" -Recurse -Force -ErrorAction SilentlyContinue
           npm run make -- --platform=$env:BUILD_PLATFORM --arch=$env:BUILD_ARCH
@@ -183,7 +183,7 @@ jobs:
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: "${{ matrix.artifact }}"
           if-no-files-found: error
           retention-days: 14
           path: dist-artifacts/*

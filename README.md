@@ -16,6 +16,21 @@ npm test
 npm run check
 ```
 
+## 远程自动打包
+
+仓库包含 GitHub Actions workflow：`.github/workflows/build.yml`。
+
+- push 到 `main` 或手动运行 workflow 时，会在 GitHub 的 Windows runner 上执行 `npm ci`、`npm test` 和 `npm run make`。
+- 打包产物不会提交进 git，会作为 Actions artifact 上传，保留 14 天。
+- 推送 `v*` 标签时，会额外创建/更新 GitHub Release，并上传 Windows 安装包与 zip。
+
+发布新版本示例：
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ## v1 范围
 
 - 支持 `.docx`，不直接支持旧 `.doc`。

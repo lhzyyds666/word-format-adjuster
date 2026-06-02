@@ -14,6 +14,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-windows:
     name: Build Windows desktop app
@@ -36,14 +39,51 @@ jobs:
         run: npm test
 
       - name: Make distributables
-        run: npm run make
+        run: npm run make -- --platform win32 --arch x64
 
-      - name: Show packaged files
+      - name: Collect packaged files
         shell: pwsh
         run: |
-          Get-ChildItem -Path out/make -Recurse -File |
-            Select-Object FullName, Length |
-            Format-Table -AutoSize
+          $artifactDir = "dist-artifacts"
+          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
+
+          $expected = @(
+            "out/make/squirrel.windows/x64/WordFormatAdjusterSetup.exe"
+            "out/make/squirrel.windows/x64/*.nupkg"
+            "out/make/squirrel.windows/x64/RELEASES"
+            "out/make/zip/win32/x64/*.zip"
+          )
+
+          $files = @()
+          foreach ($pattern in $expected) {
+            $files += Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue
+          }
+
+          if ($files.Count -eq 0) {
+            Write-Host "Expected out/make files were not found. Searching workspace..."
+            $files = Get-ChildItem -Path . -Recurse -File |
+              Where-Object {
+                $_.FullName -notmatch "\\node_modules\\" -and
+                $_.FullName -notmatch "\\.git\\" -and
+                (
+                  $_.Name -eq "WordFormatAdjusterSetup.exe" -or
+                  $_.Name -eq "RELEASES" -or
+                  $_.Name -like "*.nupkg" -or
+                  $_.Name -like "*.zip"
+                )
+              }
+          }
+
+          if ($files.Count -eq 0) {
+            throw "No packaged files found after npm run make."
+          }
+
+          foreach ($file in $files) {
+            Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $artifactDir $file.Name) -Force
+          }
+
+          Get-ChildItem -Path $artifactDir -File |
+            ForEach-Object { "{0} {1:n2} MB" -f $_.Name, ($_.Length / 1MB) }
 
       - name: Upload Windows package artifact
         uses: actions/upload-artifact@v4
@@ -51,11 +91,7 @@ jobs:
           name: word-format-adjuster-win32-x64
           if-no-files-found: error
           retention-days: 14
-          path: |
-            out/make/squirrel.windows/x64/WordFormatAdjusterSetup.exe
-            out/make/squirrel.windows/x64/*.nupkg
-            out/make/squirrel.windows/x64/RELEASES
-            out/make/zip/win32/x64/*.zip
+          path: dist-artifacts/*
 
       - name: Publish GitHub Release for version tags
         if: startsWith(github.ref, 'refs/tags/v')
@@ -64,12 +100,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = $env:GITHUB_REF_NAME
-          $assets = @(
-            (Get-Item "out/make/squirrel.windows/x64/WordFormatAdjusterSetup.exe").FullName
-            (Get-Item "out/make/squirrel.windows/x64/*.nupkg").FullName
-            (Get-Item "out/make/squirrel.windows/x64/RELEASES").FullName
-            (Get-Item "out/make/zip/win32/x64/*.zip").FullName
-          )
+          $assets = (Get-ChildItem "dist-artifacts" -File).FullName
 
           if (gh release view $tag *> $null) {
             gh release upload $tag @assets --clobber

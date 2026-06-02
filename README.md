@@ -1,6 +1,26 @@
 # Word 格式调整器
 
-本项目是一个本地 Windows 桌面应用，用于读取 `.docx`、提取模板格式、套用结构化格式，并提供半自动交叉引用入口。
+![Release](https://img.shields.io/github/v/release/lhzyyds666/word-format-adjuster)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-2f6fed)
+![License](https://img.shields.io/badge/license-MIT-2ea44f)
+
+一个本地运行的 DOCX 桌面工具，用来整理论文、报告和模板文档的格式。它可以读取目标文档、提取模板的结构化格式，并把页面、正文、标题、页眉页脚、表格、题注和编号规则套用到目标 `.docx` 中。
+
+[下载最新版](https://github.com/lhzyyds666/word-format-adjuster/releases/latest)
+
+## 功能
+
+- 模板提取：从模板 `.docx` 中提取页面设置、正文样式、标题样式、表格样式、题注规则、页眉页脚规则和多级编号配置。
+- 一键套用：把提取出的结构化格式应用到目标文档，并生成新的 `.docx`。
+- 手动调整：支持页面、字体、字号、颜色、段前段后、行距、缩进、标题层级、页眉页脚、题注和表格等格式项。
+- 交叉引用：扫描标题、题注和书签，辅助插入 `REF` / `PAGEREF` 字段。
+- 本地处理：文档在本机读取和转换，不需要上传到在线服务。
+
+## 安全边界
+
+- 只支持 `.docx`，暂不直接处理旧版 `.doc`。
+- 模板模式默认只提取格式，不复制模板正文内容、图片、批注、修订痕迹或作者隐私信息。
+- 插入交叉引用后，需要在 Word/WPS 中更新域，才能刷新最终页码和引用文本。
 
 ## 开发
 
@@ -15,25 +35,3 @@ npm run dev
 npm test
 npm run check
 ```
-
-## 远程自动打包
-
-仓库包含 GitHub Actions workflow：`.github/workflows/build.yml`。
-
-- push 到 `main` 或手动运行 workflow 时，会在 GitHub 的 Windows、macOS、Linux runner 上分别执行 `npm ci`、`npm test` 和桌面打包。
-- 打包产物不会提交进 git，会作为 Actions artifact 上传，保留 14 天。
-- 推送 `v*` 标签时，会额外创建/更新 GitHub Release，并上传三平台产物。
-- 优先上传 Electron Forge maker 产物；如果 runner 没有生成 maker 文件，会自动用 `electron-packager` 生成便携版包作为兜底。
-
-发布新版本示例：
-
-```powershell
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-## v1 范围
-
-- 支持 `.docx`，不直接支持旧 `.doc`。
-- 模板提取只提取结构化格式，不复制模板正文、图片、批注、修订痕迹。
-- 交叉引用采用半自动扫描和插入字段，插入后需要在 Word/WPS 中更新域。
